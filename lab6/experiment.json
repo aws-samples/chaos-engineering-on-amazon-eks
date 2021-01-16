@@ -1,0 +1,95 @@
+{
+  "version": "1.0.0",
+  "title": "Losing a kubernetes worker node does not impact our users",
+  "description": "n/a",
+  "configuration": {
+    "front_url": {
+      "type": "env",
+      "key": "FRONT_URL",
+      "default": "http://localhost:30080/"
+    },
+    "aws_region": "<REGION>",
+    "aws_profile_name": "<PROFILE>"
+  },
+  "steady-state-hypothesis": {
+    "title": "n/a",
+    "probes": [
+      {
+        "type": "probe",
+        "name": "front-service-must-be-ok",
+        "tolerance": 200,
+        "provider": {
+          "type": "http",
+          "url": "${front_url}"
+        }
+      },
+      {
+        "type": "probe",
+        "name": "front-service-does-not-return-an-error",
+        "tolerance": true,
+        "provider": {
+          "type": "python",
+          "module": "tolerances",
+          "func": "should_not_have_any_errors",
+          "arguments": {
+            "filepath": "lab6/vegeta_results.json"
+          }
+        }
+      }
+    ]
+  },
+  "method": [
+    {
+      "type": "action",
+      "name": "simulate-some-traffic",
+      "background": true,
+      "provider": {
+        "type": "process",
+        "path": "vegeta",
+        "arguments": "attack -targets=lab6/vegeta.txt -workers=1 -rate=3 -timeout=2s -duration=40s -output=lab6/vegeta_results.bin"
+      }
+    },
+    {
+      "type": "action",
+      "name": "terminate-worker-node",
+      "pauses": {
+        "before": 5,
+        "after": 60
+      },
+      "provider": {
+           "module": "chaosaws.asg.actions",
+           "func": "stop_random_instances",
+           "type": "python",
+           "arguments": {
+              "asg_names": [
+                  "<EKS AUTOSCALING GROUP NAME>"
+              ],
+              "instance_count": 1
+            }
+      }
+    },
+    {
+      "type": "action",
+      "name": "transform-http-traces",
+      "provider": {
+        "type": "process",
+        "path": "vegeta",
+        "arguments": "encode --output lab6/vegeta_results.json --to json < lab6/vegeta_results.bin"
+      }
+    },
+    {
+      "type": "probe",
+      "name": "fetch-application-logs",
+      "provider": {
+        "type": "python",
+        "module": "chaosk8s.pod.probes",
+        "func": "read_pod_logs",
+        "arguments": {
+          "label_selector": "app=middle",
+          "container_name": "middle",
+          "last": "20s"
+        }
+      }
+    }
+  ]
+}

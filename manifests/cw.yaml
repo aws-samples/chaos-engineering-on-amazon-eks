@@ -1,0 +1,58 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: cwpod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: cwpod
+  template:
+    metadata:
+      name: cwpod
+      labels:
+        name: cwpod
+        app: cwpod
+        service: cwpod
+    spec:
+      serviceAccountName: cw-metric-writer
+      containers:
+      - image: <IMAGE_URI>
+        name: cwpod
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "200m"
+            memory: 64Mi
+          requests:
+            cpu: "100m"
+            memory: 64Mi
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: cwpod
+  labels:
+    service: cwpod
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8000
+    targetPort: 8000
+  selector:
+    service: cwpod

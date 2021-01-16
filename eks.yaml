@@ -1,0 +1,29 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: chaoscluster
+  region: us-east-2
+managedNodeGroups:
+  - name: ng1
+    instanceType: m5.xlarge
+    desiredCapacity: 5
+    minSize: 3
+    maxSize: 8
+    volumeSize: 40
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["*"]
+iam:
+  withOIDC: true
+  serviceAccounts:
+  - metadata:
+      name: cw-metric-writer
+      # if no namespace is set, "default" will be used;
+      # the namespace will be created if it doesn't exist already
+      namespace: cw-metric-writer
+      labels: {aws-usage: "application"}
+    attachPolicyARNs:
+    - "arn:aws:iam::aws:policy/CloudWatchFullAccess"

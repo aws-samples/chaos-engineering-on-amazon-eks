@@ -1,0 +1,94 @@
+{
+  "version": "1.0.0",
+  "title": "Failing to write to CloudWatch does not impact our users",
+  "description": "n/a",
+  "configuration": {
+    "front_url": {
+      "type": "env",
+      "key": "FRONT_URL",
+      "default": "http://localhost:8000/"
+    },
+    "aws_region": "<REGION>",
+    "aws_profile_name": "<PROFILE>"
+  },
+  "steady-state-hypothesis": {
+    "title": "n/a",
+    "probes": [
+      {
+        "type": "probe",
+        "name": "front-service-must-be-ok",
+        "tolerance": 200,
+        "provider": {
+          "type": "http",
+          "url": "${front_url}"
+        }
+      },
+      {
+        "type": "probe",
+        "name": "front-service-does-not-return-an-error",
+        "tolerance": true,
+        "provider": {
+          "type": "python",
+          "module": "tolerances",
+          "func": "should_not_have_any_errors",
+          "arguments": {
+            "filepath": "lab7/vegeta_results.json"
+          }
+        }
+      }
+    ]
+  },
+  "method": [
+    {
+      "type": "action",
+      "name": "simulate-some-traffic",
+      "background": true,
+      "provider": {
+        "type": "process",
+        "path": "vegeta",
+        "arguments": "attack -targets=lab7/vegeta.txt -workers=1 -rate=3 -timeout=2s -duration=40s -output=lab7/vegeta_results.bin"
+      }
+    },
+    {
+      "type": "action",
+      "name": "disallow-cw-writes",
+      "pauses": {
+        "before": 5,
+        "after": 30
+      },
+      "provider": {
+           "module": "chaosaws.iam.actions",
+           "func": "detach_role_policy",
+           "type": "python",
+           "arguments": {
+              "role_name": "<ROLE_NAME>",
+              "arn": "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+            }
+      }
+    },
+    {
+      "type": "action",
+      "name": "transform-http-traces",
+      "provider": {
+        "type": "process",
+        "path": "vegeta",
+        "arguments": "encode --output lab7/vegeta_results.json --to json < lab7/vegeta_results.bin"
+      }
+    },
+    {
+      "type": "probe",
+      "name": "fetch-application-logs",
+      "provider": {
+        "type": "python",
+        "module": "chaosk8s.pod.probes",
+        "func": "read_pod_logs",
+        "arguments": {
+          "label_selector": "app=cwpod",
+          "container_name": "cwpod",
+          "ns": "cw-metric-writer",
+          "last": "20s"
+        }
+      }
+    }
+  ]
+}
